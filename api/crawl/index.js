@@ -1,10 +1,12 @@
 /**
  * 크롤링 트리거 API
- * GET /api/crawl - 수집 실행 후 DB에 upsert (중고나라 + 뮬, 판매중만)
+ * GET /api/crawl - 수집 실행 후 DB에 upsert (중고나라 + 뮬 + 당근마켓, 판매중만)
+ * 뮬 403 시: 환경변수 SCRAPER_API_KEY 설정 시 ScraperAPI 경유 요청
  */
 import { createClient } from '@supabase/supabase-js';
 import { crawlJoongna } from './joongna.js';
 import { crawlMule } from './mule.js';
+import { crawlDaangn } from './daangn.js';
 
 export const config = { maxDuration: 60 };
 
@@ -38,7 +40,12 @@ export default async function handler(req, res) {
   }
 
   const supabase = createClient(supabaseUrl, supabaseKey);
-  const results = { joongna: { count: 0, error: null }, mule: { count: 0, error: null }, total: 0 };
+  const results = {
+    joongna: { count: 0, error: null },
+    mule: { count: 0, error: null },
+    daangn: { count: 0, error: null },
+    total: 0,
+  };
   const allRows = [];
 
   try {
@@ -51,13 +58,26 @@ export default async function handler(req, res) {
       results.joongna.error = e.message;
     }
 
-    // 뮬: soldout=n 으로 판매중만 수집, 제목에 '판매완료' 있는 행 제외
+    // 뮬: soldout=n 판매중만. 403 우회: SCRAPER_API_KEY 있으면 ScraperAPI 사용
     try {
-      const muleItems = await crawlMule({ maxItems: 20, maxPages: 2 });
+      const muleItems = await crawlMule({
+        maxItems: 20,
+        maxPages: 2,
+        scraperApiKey: process.env.SCRAPER_API_KEY,
+      });
       allRows.push(...muleItems.map(toRow));
       results.mule.count = muleItems.length;
     } catch (e) {
       results.mule.error = e.message;
+    }
+
+    // 당근마켓: 검색어 "왼손기타", 판매완료 상세에서 제외
+    try {
+      const daangnItems = await crawlDaangn({ enrich: true, maxItems: 10 });
+      allRows.push(...daangnItems.map(toRow));
+      results.daangn.count = daangnItems.length;
+    } catch (e) {
+      results.daangn.error = e.message;
     }
 
     if (allRows.length === 0) {
@@ -81,7 +101,7 @@ export default async function handler(req, res) {
 
     return res.status(200).json({
       ok: true,
-      message: `Upserted ${allRows.length} listings (joongna: ${results.joongna.count}, mule: ${results.mule.count})`,
+      message: `Upserted ${allRows.length} listings`,
       results,
     });
   } catch (err) {

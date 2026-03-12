@@ -1,6 +1,9 @@
 /**
  * 뮬(mule.co.kr) 중고악기 장터 - 왼손 기타 검색 결과 크롤링
  * soldout=n → 판매중만 (판매완료 제외)
+ *
+ * 403 우회: 환경변수 SCRAPER_API_KEY 가 있으면 ScraperAPI로 요청 (프록시 경유)
+ * - 무료 크레딧 5000회: https://www.scraperapi.com
  */
 
 const MULE_LIST_URL = 'https://www.mule.co.kr/bbs/market/sell';
@@ -20,20 +23,34 @@ function buildListUrl(page = 1) {
   return `${MULE_LIST_URL}?${params.toString()}`;
 }
 
-async function fetchWithHeaders(url) {
-  const res = await fetch(url, {
-    headers: {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-      'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
-      'Referer': 'https://www.mule.co.kr/bbs/market/sell',
-      'Origin': 'https://www.mule.co.kr',
-    },
-    redirect: 'follow',
-    signal: AbortSignal.timeout(20000),
-  });
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`);
-  return res.text();
+/** SCRAPER_API_KEY 있으면 프록시 경유 fetch, 없으면 직접 fetch */
+function createFetcher() {
+  const apiKey = typeof process !== 'undefined' && process.env && process.env.SCRAPER_API_KEY;
+  if (apiKey) {
+    return async (url) => {
+      const res = await fetch(
+        `https://api.scraperapi.com?api_key=${apiKey}&url=${encodeURIComponent(url)}`,
+        { signal: AbortSignal.timeout(25000) }
+      );
+      if (!res.ok) throw new Error(`ScraperAPI HTTP ${res.status}: ${url}`);
+      return res.text();
+    };
+  }
+  return async (url) => {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+        'Referer': 'https://www.mule.co.kr/bbs/market/sell',
+        'Origin': 'https://www.mule.co.kr',
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout(20000),
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`);
+    return res.text();
+  };
 }
 
 /**
@@ -96,14 +113,25 @@ function parseListPage(html) {
 
 /**
  * 뮬 목록 1~N페이지 크롤 (판매중만, soldout=n)
+ * options.scraperApiKey: 있으면 해당 키로 ScraperAPI 사용 (403 우회)
  */
 export async function crawlMule(options = {}) {
-  const { maxItems = 30, maxPages = 2 } = options;
+  const { maxItems = 30, maxPages = 2, scraperApiKey } = options;
   const all = [];
+  const fetchFn = scraperApiKey
+    ? async (url) => {
+        const res = await fetch(
+          `https://api.scraperapi.com?api_key=${scraperApiKey}&url=${encodeURIComponent(url)}`,
+          { signal: AbortSignal.timeout(25000) }
+        );
+        if (!res.ok) throw new Error(`ScraperAPI HTTP ${res.status}: ${url}`);
+        return res.text();
+      }
+    : createFetcher();
 
   for (let page = 1; page <= maxPages; page++) {
     try {
-      const html = await fetchWithHeaders(buildListUrl(page));
+      const html = await fetchFn(buildListUrl(page));
       const items = parseListPage(html);
       for (const item of items) {
         if (all.length >= maxItems) break;
