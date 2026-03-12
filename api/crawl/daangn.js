@@ -1,6 +1,7 @@
 /**
  * 당근마켓(daangn.com) 왼손 기타 검색 결과 크롤링
  * 검색어: 왼손기타 (지역별 결과가 다를 수 있음)
+ * 수집 시 제목이 기타/베이스 관련인 경우만 포함 (골프 등 무관 매물 제외)
  */
 
 const DAANGN_SEARCH_URL = 'https://www.daangn.com/kr/buy-sell/s/?search=%EC%99%BC%EC%86%90%EA%B8%B0%ED%83%80';
@@ -18,6 +19,14 @@ async function fetchWithHeaders(url) {
   });
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`);
   return res.text();
+}
+
+/** 제목이 기타/베이스 관련인지 여부 (골프 등 무관 매물 제외) */
+function isGuitarRelated(title) {
+  if (!title || typeof title !== 'string') return false;
+  const t = title.trim();
+  if (/골프|자동차|부동산|의류|가구|식품/i.test(t)) return false;
+  return /기타|베이스|일렉|통기타|어쿠스틱|레스폴|스트랫|펜더|깁슨|야마하|이바네즈|아이바네즈|왼손\s*잡이|왼손\s*기타/i.test(t);
 }
 
 /**
@@ -97,10 +106,10 @@ export async function crawlDaangn(options = {}) {
     const out = [];
     for (let i = 0; i < items.length; i++) {
       const enriched = await enrichFromDetail(items[i]);
+      let item = null;
       if (enriched != null) {
-        out.push(enriched);
+        item = enriched;
       } else {
-        // 상세 수집 실패(판매완료/오류)여도 링크는 저장해 목록에 노출
         const fallback = { ...items[i] };
         try {
           fallback.title = decodeURIComponent(fallback.external_id.replace(/-/g, ' ')).slice(0, 60) || `왼손 기타`;
@@ -108,8 +117,9 @@ export async function crawlDaangn(options = {}) {
           fallback.title = '왼손 기타 (당근)';
         }
         fallback.product_name = fallback.title;
-        out.push(fallback);
+        item = fallback;
       }
+      if (item && isGuitarRelated(item.title)) out.push(item);
       if (i < items.length - 1) await new Promise(r => setTimeout(r, 400));
     }
     return out;

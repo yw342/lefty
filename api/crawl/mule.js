@@ -154,6 +154,28 @@ function parseListPage(html) {
     }
   }
 
+  // 6) ScraperAPI 등에서 HTML 구조가 다를 때: 페이지 어디든 idx=7자리이상 숫자
+  const re6 = /idx=(\d{7,})/g;
+  while ((m = re6.exec(html)) !== null) {
+    const idx = m[1];
+    if (seen.has(idx)) continue;
+    const num = parseInt(idx, 10);
+    if (num >= 67000000) {
+      seen.add(idx);
+      items.push({
+        source_site: 'mule',
+        external_id: idx,
+        title: `왼손 기타 ${idx}`,
+        price: null,
+        product_name: null,
+        image_url: null,
+        url: `${MULE_BASE}/bbs/market/sell?idx=${idx}&v=v`,
+        description: null,
+        location: null,
+      });
+    }
+  }
+
   return items;
 }
 
