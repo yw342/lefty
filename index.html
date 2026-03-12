@@ -356,16 +356,32 @@
       });
     }
 
+    function safeParseJson(text, fallback) {
+      try {
+        return JSON.parse(text);
+      } catch (_) {
+        return fallback;
+      }
+    }
+
     async function loadPage(page) {
       showLoading();
       try {
         const base = window.location.origin;
         const res = await fetch(`${base}/api/listings?page=${page}&limit=${LIMIT}`);
-        if (!res.ok) throw new Error(res.status + ' ' + (await res.text()));
-        const data = await res.json();
+        const text = await res.text();
+        if (!res.ok) {
+          showError('목록 요청 실패 (' + res.status + '). ' + (text.slice(0, 100) || ''));
+          return;
+        }
+        const data = safeParseJson(text, null);
+        if (!data || !data.pagination) {
+          showError('목록 응답 형식 오류. ' + (text.slice(0, 80) || ''));
+          return;
+        }
         renderList(data);
       } catch (e) {
-        showError('목록을 불러오지 못했습니다. ' + e.message);
+        showError('목록을 불러오지 못했습니다. ' + (e.message || String(e)));
       }
     }
 
@@ -376,26 +392,24 @@
         const base = window.location.origin;
         const res = await fetch(`${base}/api/crawl`);
         const text = await res.text();
-        let json = null;
-        try {
-          json = JSON.parse(text);
-        } catch (_) {
-          syncMsg.textContent = '서버 응답 오류 (JSON 아님). ' + (text.slice(0, 80) || res.status);
+        const json = safeParseJson(text, null);
+        if (json === null) {
+          syncMsg.textContent = '서버 응답 오류 (JSON 아님). ' + (res.ok ? '' : res.status + ' ') + (text.slice(0, 60) || '');
           syncBtn.disabled = false;
-          setTimeout(() => { syncMsg.textContent = ''; }, 8000);
+          setTimeout(function () { syncMsg.textContent = ''; }, 8000);
           return;
         }
         if (json.ok) {
-          syncMsg.textContent = `${json.results.total}건 반영됨`;
+          syncMsg.textContent = (json.results && json.results.total != null ? json.results.total : 0) + '건 반영됨';
           loadPage(1);
         } else {
           syncMsg.textContent = '오류: ' + (json.error || '알 수 없음');
         }
       } catch (e) {
-        syncMsg.textContent = '오류: ' + e.message;
+        syncMsg.textContent = '오류: ' + (e.message || String(e));
       }
       syncBtn.disabled = false;
-      setTimeout(() => { syncMsg.textContent = ''; }, 5000);
+      setTimeout(function () { syncMsg.textContent = ''; }, 5000);
     }
 
     syncBtn.addEventListener('click', runSync);
