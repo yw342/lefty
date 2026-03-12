@@ -1,12 +1,13 @@
 /**
  * 크롤링 트리거 API
- * GET /api/crawl - 수집 실행 후 DB에 upsert (중고나라 + 뮬 + 당근마켓, 판매중만)
+ * GET /api/crawl - 수집 실행 후 DB에 upsert (중고나라 + 뮬 + 당근마켓 + 번개장터, 판매중만)
  * 항상 JSON 응답 보장. 타임아웃 방지로 수집량 축소.
  */
 import { createClient } from '@supabase/supabase-js';
 import { crawlJoongna } from './joongna.js';
 import { crawlMule } from './mule.js';
 import { crawlDaangn } from './daangn.js';
+import { crawlBunjang } from './bunjang.js';
 
 export const config = { maxDuration: 60 };
 
@@ -35,6 +36,7 @@ export default async function handler(req, res) {
     joongna: { count: 0, error: null },
     mule: { count: 0, error: null },
     daangn: { count: 0, error: null },
+    bunjang: { count: 0, error: null },
     total: 0,
   };
 
@@ -82,6 +84,18 @@ export default async function handler(req, res) {
       results.daangn.count = daangnItems.length;
     } catch (e) {
       results.daangn.error = e.message || String(e);
+    }
+
+    // 번개장터 (JS 렌더링이라 SCRAPER_API_KEY 있으면 ScraperAPI 사용)
+    try {
+      const bunjangItems = await crawlBunjang({
+        maxItems: 10,
+        scraperApiKey: process.env.SCRAPER_API_KEY,
+      });
+      allRows.push(...bunjangItems.map(toRow));
+      results.bunjang.count = bunjangItems.length;
+    } catch (e) {
+      results.bunjang.error = e.message || String(e);
     }
 
     if (allRows.length === 0) {
