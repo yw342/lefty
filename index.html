@@ -375,7 +375,16 @@
       try {
         const base = window.location.origin;
         const res = await fetch(`${base}/api/crawl`);
-        const json = await res.json();
+        const text = await res.text();
+        let json = null;
+        try {
+          json = JSON.parse(text);
+        } catch (_) {
+          syncMsg.textContent = '서버 응답 오류 (JSON 아님). ' + (text.slice(0, 80) || res.status);
+          syncBtn.disabled = false;
+          setTimeout(() => { syncMsg.textContent = ''; }, 8000);
+          return;
+        }
         if (json.ok) {
           syncMsg.textContent = `${json.results.total}건 반영됨`;
           loadPage(1);
