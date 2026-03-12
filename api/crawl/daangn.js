@@ -97,7 +97,19 @@ export async function crawlDaangn(options = {}) {
     const out = [];
     for (let i = 0; i < items.length; i++) {
       const enriched = await enrichFromDetail(items[i]);
-      if (enriched != null) out.push(enriched);
+      if (enriched != null) {
+        out.push(enriched);
+      } else {
+        // 상세 수집 실패(판매완료/오류)여도 링크는 저장해 목록에 노출
+        const fallback = { ...items[i] };
+        try {
+          fallback.title = decodeURIComponent(fallback.external_id.replace(/-/g, ' ')).slice(0, 60) || `왼손 기타`;
+        } catch (_) {
+          fallback.title = '왼손 기타 (당근)';
+        }
+        fallback.product_name = fallback.title;
+        out.push(fallback);
+      }
       if (i < items.length - 1) await new Promise(r => setTimeout(r, 400));
     }
     return out;

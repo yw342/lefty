@@ -23,7 +23,7 @@ function buildListUrl(page = 1) {
   return `${MULE_LIST_URL}?${params.toString()}`;
 }
 
-/** SCRAPER_API_KEY 있으면 프록시 경유 fetch, 없으면 직접 fetch */
+/** 프록시 경유 fetch (403 우회용). 우선 ScraperAPI, 없으면 공개 프록시 시도 */
 function createFetcher() {
   const apiKey = typeof process !== 'undefined' && process.env && process.env.SCRAPER_API_KEY;
   if (apiKey) {
@@ -37,59 +37,70 @@ function createFetcher() {
     };
   }
   return async (url) => {
-    const res = await fetch(url, {
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
-        'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
-        'Referer': 'https://www.mule.co.kr/bbs/market/sell',
-        'Origin': 'https://www.mule.co.kr',
-      },
-      redirect: 'follow',
-      signal: AbortSignal.timeout(20000),
-    });
+    const headers = {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+      'Referer': 'https://www.mule.co.kr/bbs/market/sell',
+    };
+    let res = await fetch(url, { headers, redirect: 'follow', signal: AbortSignal.timeout(20000) });
+    if (res.status === 403 || res.status === 0) {
+      for (const proxy of [
+        `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+        `https://corsproxy.io/?${encodeURIComponent(url)}`,
+      ]) {
+        try {
+          const r = await fetch(proxy, { signal: AbortSignal.timeout(15000) });
+          if (r.ok) {
+            res = r;
+            break;
+          }
+        } catch (_) {}
+      }
+    }
     if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`);
     return res.text();
   };
 }
 
 /**
+ * 링크 텍스트에서 제목·가격 추출
+ */
+function parseTitlePrice(text) {
+  let title = (text || '').trim().replace(/\s+/g, ' ');
+  let price = null;
+  const priceSuffix = title.match(/\s*\[\d+\]\s*(\d+(?:\.\d+)?)\s*만원\s*$/);
+  if (priceSuffix) {
+    price = `${priceSuffix[1]}만원`;
+    title = title.replace(/\s*\[\d+\]\s*\d+(?:\.\d+)?\s*만원\s*$/, '').trim();
+  } else {
+    const priceOnly = title.match(/(\d+(?:\.\d+)?)\s*만원\s*$|(\d{1,3}(?:,\d{3})*)\s*원\s*$/);
+    if (priceOnly) {
+      if (priceOnly[1]) price = `${priceOnly[1]}만원`;
+      else if (priceOnly[2]) price = priceOnly[2].trim() + '원';
+      title = title.replace(/\s*\d+(?:\.\d+)?\s*만원\s*$|\s*\d{1,3}(?:,\d{3})*\s*원\s*$/, '').trim();
+    }
+  }
+  title = title.replace(/\s*\[\d+\]\s*$/, '').trim();
+  return { title: title || null, price };
+}
+
+/**
  * 목록 HTML에서 게시글 행 파싱
- * - href 내 idx=숫자 추출 (매칭: &amp; 또는 & 사용)
- * - 제목·가격은 링크 텍스트 또는 인근 텍스트에서 추출
+ * - href="..." 또는 href='...' 또는 ](url) 마크다운 스타일 지원
  */
 function parseListPage(html) {
   const items = [];
   const seen = new Set();
 
-  // 1) href="...bbs/market/sell?...idx=123..."> 텍스트 (공백/개행 허용)
-  const linkRegex = /href="([^"]*\/bbs\/market\/sell\?[^"]*idx=(\d+)[^"]*)"[^>]*>\s*([^<]*)</g;
-  let m;
-  while ((m = linkRegex.exec(html)) !== null) {
-    const idx = m[2];
-    let text = (m[3] || '').trim().replace(/\s+/g, ' ');
-
-    if (seen.has(idx)) continue;
-    if (/\[필독\]|뮬지기3?|^공지\s/i.test(text)) continue;
-    if (/판매\s*완료|판매완료/i.test(text)) continue;
-
+  function addItem(idx, linkText) {
+    if (seen.has(idx)) return;
+    if (/\[필독\]|뮬지기3?|^공지\s/i.test(linkText || '')) return;
+    if (/판매\s*완료|판매완료/i.test(linkText || '')) return;
     seen.add(idx);
-    const cleanUrl = `${MULE_BASE}/bbs/market/sell?idx=${idx}&v=v`;
 
-    let price = null;
-    const priceSuffix = text.match(/\s*\[\d+\]\s*(\d+(?:\.\d+)?)\s*만원\s*$/);
-    if (priceSuffix) {
-      price = `${priceSuffix[1]}만원`;
-      text = text.replace(/\s*\[\d+\]\s*\d+(?:\.\d+)?\s*만원\s*$/, '').trim();
-    } else {
-      const priceOnly = text.match(/(\d+(?:\.\d+)?)\s*만원\s*$|(\d{1,3}(?:,\d{3})*)\s*원\s*$/);
-      if (priceOnly) {
-        if (priceOnly[1]) price = `${priceOnly[1]}만원`;
-        else if (priceOnly[2]) price = priceOnly[2].trim() + '원';
-        text = text.replace(/\s*\d+(?:\.\d+)?\s*만원\s*$|\s*\d{1,3}(?:,\d{3})*\s*원\s*$/, '').trim();
-      }
-    }
-    const title = text.replace(/\s*\[\d+\]\s*$/, '').trim() || `왼손 기타 ${idx}`;
+    const { title: parsedTitle, price } = parseTitlePrice(linkText);
+    const title = parsedTitle || `왼손 기타 ${idx}`;
 
     items.push({
       source_site: 'mule',
@@ -98,10 +109,49 @@ function parseListPage(html) {
       price,
       product_name: title,
       image_url: null,
-      url: cleanUrl,
+      url: `${MULE_BASE}/bbs/market/sell?idx=${idx}&v=v`,
       description: null,
       location: null,
     });
+  }
+
+  // 1) href="...idx=123..."> 텍스트
+  let m;
+  const re1 = /href="([^"]*\/bbs\/market\/sell\?[^"]*idx=(\d+)[^"]*)"[^>]*>\s*([^<]*)</g;
+  while ((m = re1.exec(html)) !== null) addItem(m[2], m[3]);
+
+  // 2) href='...idx=123...'> (단일 따옴표)
+  const re2 = /href='([^']*\/bbs\/market\/sell\?[^']*idx=(\d+)[^']*)'[^>]*>\s*([^<]*)</g;
+  while ((m = re2.exec(html)) !== null) addItem(m[2], m[3]);
+
+  // 3) 마크다운 스타일 ](url)...  제목](url)
+  const re3 = /\]\((https?:\/\/[^)]*\/bbs\/market\/sell\?[^)]*idx=(\d+)[^)]*)\)\s*\|/g;
+  while ((m = re3.exec(html)) !== null) addItem(m[2], null);
+
+  // 4) ](url) 직전 텍스트가 이전 매치 끝에서부터인 경우: [...제목 [1] 25만원](url)
+  const re4 = /\[([^\]]{10,}?)\]\s*\((https?:\/\/[^)]*\/bbs\/market\/sell\?[^)]*idx=(\d+)[^)]*)\)/g;
+  while ((m = re4.exec(html)) !== null) addItem(m[3], m[1]);
+
+  // 5) 폴백: href 어딘가에 idx=숫자만 있어도 수집 (공지 대부분 66xxxxx 이하이므로 67xxxxx 이상만)
+  const re5 = /\/bbs\/market\/sell\?[^"'>]*idx=(\d+)/g;
+  while ((m = re5.exec(html)) !== null) {
+    const idx = m[1];
+    if (seen.has(idx)) continue;
+    const num = parseInt(idx, 10);
+    if (num >= 67000000) {
+      seen.add(idx);
+      items.push({
+        source_site: 'mule',
+        external_id: idx,
+        title: `왼손 기타 ${idx}`,
+        price: null,
+        product_name: null,
+        image_url: null,
+        url: `${MULE_BASE}/bbs/market/sell?idx=${idx}&v=v`,
+        description: null,
+        location: null,
+      });
+    }
   }
 
   return items;
