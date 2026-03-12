@@ -1,0 +1,121 @@
+/**
+ * 뮬(mule.co.kr) 중고악기 장터 - 왼손 기타 검색 결과 크롤링
+ * soldout=n → 판매중만 (판매완료 제외)
+ */
+
+const MULE_LIST_URL = 'https://www.mule.co.kr/bbs/market/sell';
+const MULE_BASE = 'https://www.mule.co.kr';
+
+function buildListUrl(page = 1) {
+  const params = new URLSearchParams({
+    qf: 'title',
+    qs: '왼손',
+    mode: 'list',
+    map: 'list',
+    soldout: 'n',  // 판매중만 (판매완료 제외)
+    page: String(page),
+    of: 'wdate',
+    od: 'desc',
+  });
+  return `${MULE_LIST_URL}?${params.toString()}`;
+}
+
+async function fetchWithHeaders(url) {
+  const res = await fetch(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+      'Accept-Language': 'ko-KR,ko;q=0.9,en;q=0.8',
+      'Referer': 'https://www.mule.co.kr/bbs/market/sell',
+      'Origin': 'https://www.mule.co.kr',
+    },
+    redirect: 'follow',
+    signal: AbortSignal.timeout(20000),
+  });
+  if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`);
+  return res.text();
+}
+
+/**
+ * 목록 HTML에서 게시글 행 파싱
+ * - idx로 상세 URL 구성, 제목·가격은 링크 텍스트에서 추출
+ * - "판매완료" 포함 제목은 제외
+ */
+function parseListPage(html) {
+  const items = [];
+  const seen = new Set();
+
+  // href에 idx=숫자, 링크 텍스트에 제목 [댓글수] 가격
+  const linkRegex = /href="(https?:\/\/[^"]*\/bbs\/market\/sell\?[^"]*idx=(\d+)[^"]*)"[^>]*>([^<]+)</g;
+  let m;
+  while ((m = linkRegex.exec(html)) !== null) {
+    const fullHref = m[1];
+    const idx = m[2];
+    let text = m[3].trim();
+
+    if (seen.has(idx)) continue;
+    // 공지/필독 제외
+    if (/\[필독\]|뮬지기|^공지\s/i.test(text)) continue;
+    // 판매완료 제외 (제목에 포함된 경우)
+    if (/판매\s*완료|판매완료/i.test(text)) continue;
+
+    seen.add(idx);
+    const cleanUrl = `${MULE_BASE}/bbs/market/sell?idx=${idx}&v=v`;
+
+    // 제목 끝: " [댓글수] 25만원" 또는 " 120만원" 형태 제거 후 가격 추출
+    let price = null;
+    const priceSuffix = text.match(/\s+\[\d+\]\s+(\d+(?:\.\d+)?)\s*만원\s*$/);
+    if (priceSuffix) {
+      price = `${priceSuffix[1]}만원`;
+      text = text.replace(/\s+\[\d+\]\s+\d+(?:\.\d+)?\s*만원\s*$/, '').trim();
+    } else {
+      const priceOnly = text.match(/(\d+(?:\.\d+)?)\s*만원\s*$|(\d{1,3}(?:,\d{3})*)\s*원\s*$/);
+      if (priceOnly) {
+        if (priceOnly[1]) price = `${priceOnly[1]}만원`;
+        else if (priceOnly[2]) price = priceOnly[2].trim() + '원';
+        text = text.replace(/\s+\d+(?:\.\d+)?\s*만원\s*$|\s+\d{1,3}(?:,\d{3})*\s*원\s*$/, '').trim();
+      }
+    }
+    const title = text.replace(/\s+\[\d+\]\s*$/, '').trim() || `왼손 기타 ${idx}`;
+
+    items.push({
+      source_site: 'mule',
+      external_id: idx,
+      title,
+      price,
+      product_name: title,
+      image_url: null,
+      url: cleanUrl.replace(/&amp;/g, '&'),
+      description: null,
+      location: null,
+    });
+  }
+
+  return items;
+}
+
+/**
+ * 뮬 목록 1~N페이지 크롤 (판매중만, soldout=n)
+ */
+export async function crawlMule(options = {}) {
+  const { maxItems = 30, maxPages = 2 } = options;
+  const all = [];
+
+  for (let page = 1; page <= maxPages; page++) {
+    try {
+      const html = await fetchWithHeaders(buildListUrl(page));
+      const items = parseListPage(html);
+      for (const item of items) {
+        if (all.length >= maxItems) break;
+        all.push(item);
+      }
+      if (items.length === 0) break;
+      await new Promise(r => setTimeout(r, 800));
+    } catch (e) {
+      if (page === 1) throw e;
+      break;
+    }
+  }
+
+  return all.slice(0, maxItems);
+}

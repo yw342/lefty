@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>왼손 중고 기타 매물 트래커</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&display=swap" rel="stylesheet" />
+  <style>
+    :root {
+      --bg: #0f0f12;
+      --card: #1a1a1f;
+      --border: #2a2a32;
+      --text: #e8e8ed;
+      --muted: #8888a0;
+      --accent: #c9a227;
+      --accent-hover: #e0b82e;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: 'Noto Sans KR', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 1.5rem;
+    }
+
+    header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 1rem;
+      padding: 1rem 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .sync-wrap {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+    }
+
+    .sync-btn {
+      padding: 0.5rem 1rem;
+      background: var(--accent);
+      color: var(--bg);
+      border: none;
+      border-radius: 8px;
+      font-family: inherit;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .sync-btn:hover {
+      background: var(--accent-hover);
+    }
+
+    .sync-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .sync-msg {
+      font-size: 0.875rem;
+      color: var(--muted);
+    }
+
+    .toolbar {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin: 1rem 0;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+    }
+
+    .total {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 1.25rem;
+      margin: 1.5rem 0;
+    }
+
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: border-color 0.2s;
+    }
+
+    .card:hover {
+      border-color: var(--accent);
+    }
+
+    .card-link {
+      text-decoration: none;
+      color: inherit;
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .card-img-wrap {
+      aspect-ratio: 4/3;
+      background: var(--border);
+      overflow: hidden;
+    }
+
+    .card-img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+
+    .card-placeholder {
+      width: 100%;
+      height: 100%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: var(--muted);
+      font-size: 0.85rem;
+    }
+
+    .card-body {
+      padding: 1rem;
+      flex: 1;
+      display: flex;
+      flex-direction: column;
+      gap: 0.35rem;
+    }
+
+    .card-title {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 600;
+      display: -webkit-box;
+      -webkit-line-clamp: 2;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+    }
+
+    .card-price {
+      font-size: 1.1rem;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .card-meta {
+      font-size: 0.8rem;
+      color: var(--muted);
+      margin-top: auto;
+    }
+
+    .pagination {
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      gap: 0.5rem;
+      margin: 2rem 0;
+      flex-wrap: wrap;
+    }
+
+    .pagination button {
+      padding: 0.5rem 0.9rem;
+      background: var(--card);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-family: inherit;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .pagination button:hover:not(:disabled) {
+      background: var(--border);
+      border-color: var(--accent);
+    }
+
+    .pagination button:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .pagination .current {
+      font-size: 0.9rem;
+      color: var(--muted);
+    }
+
+    .loading {
+      text-align: center;
+      padding: 3rem;
+      color: var(--muted);
+    }
+
+    .error {
+      background: rgba(200, 80, 80, 0.15);
+      border: 1px solid rgba(200, 80, 80, 0.5);
+      color: #e88;
+      padding: 1rem;
+      border-radius: 8px;
+      margin: 1rem 0;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 3rem;
+      color: var(--muted);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>🎸 왼손 중고 기타 매물</h1>
+      <div class="sync-wrap">
+        <button type="button" class="sync-btn" id="syncBtn">매물 새로고침</button>
+        <span class="sync-msg" id="syncMsg"></span>
+      </div>
+    </header>
+
+    <div class="toolbar">
+      <span class="total" id="totalText"></span>
+    </div>
+
+    <div id="content">
+      <div class="loading" id="loading">불러오는 중...</div>
+      <div class="grid" id="grid" hidden></div>
+      <div class="error" id="error" hidden></div>
+      <div class="empty" id="empty" hidden>등록된 매물이 없습니다. '매물 새로고침'을 눌러 수집해 보세요.</div>
+    </div>
+
+    <nav class="pagination" id="pagination" hidden></nav>
+  </div>
+
+  <script>
+    const grid = document.getElementById('grid');
+    const loading = document.getElementById('loading');
+    const error = document.getElementById('error');
+    const empty = document.getElementById('empty');
+    const totalText = document.getElementById('totalText');
+    const pagination = document.getElementById('pagination');
+    const syncBtn = document.getElementById('syncBtn');
+    const syncMsg = document.getElementById('syncMsg');
+
+    const LIMIT = 12;
+
+    function showLoading() {
+      loading.hidden = false;
+      grid.hidden = true;
+      error.hidden = true;
+      empty.hidden = true;
+      pagination.hidden = true;
+    }
+
+    function showError(msg) {
+      loading.hidden = true;
+      grid.hidden = true;
+      empty.hidden = true;
+      pagination.hidden = true;
+      error.hidden = false;
+      error.textContent = msg;
+    }
+
+    function renderList(data) {
+      loading.hidden = true;
+      error.hidden = true;
+
+      if (!data.data || data.data.length === 0) {
+        grid.hidden = true;
+        empty.hidden = false;
+        pagination.hidden = true;
+        totalText.textContent = '';
+        return;
+      }
+
+      empty.hidden = true;
+      grid.hidden = false;
+      grid.innerHTML = data.data.map((item) => `
+        <article class="card">
+          <a class="card-link" href="${escapeHtml(item.url)}" target="_blank" rel="noopener">
+            <div class="card-img-wrap">
+              ${item.image_url
+                ? `<img class="card-img" src="${escapeHtml(item.image_url)}" alt="" loading="lazy" />`
+                : '<div class="card-placeholder">이미지 없음</div>'}
+            </div>
+            <div class="card-body">
+              <h2 class="card-title">${escapeHtml(item.title || '제목 없음')}</h2>
+              ${item.price ? `<p class="card-price">${escapeHtml(item.price)}</p>` : ''}
+              <p class="card-meta">${escapeHtml(item.source_site)} · ${formatDate(item.created_at)}</p>
+            </div>
+          </a>
+        </article>
+      `).join('');
+
+      const { pagination: p } = data;
+      totalText.textContent = `총 ${p.total}건 (${p.page} / ${p.totalPages} 페이지)`;
+      renderPagination(p);
+      pagination.hidden = false;
+    }
+
+    function escapeHtml(s) {
+      if (!s) return '';
+      const div = document.createElement('div');
+      div.textContent = s;
+      return div.innerHTML;
+    }
+
+    function formatDate(iso) {
+      if (!iso) return '';
+      const d = new Date(iso);
+      return d.toLocaleDateString('ko-KR', { year: 'numeric', month: 'short', day: 'numeric' });
+    }
+
+    function renderPagination(p) {
+      const { page, totalPages } = p;
+      let html = '';
+      html += `<button type="button" data-page="${page - 1}" ${page <= 1 ? 'disabled' : ''}>이전</button>`;
+      html += `<span class="current">${page} / ${totalPages}</span>`;
+      html += `<button type="button" data-page="${page + 1}" ${page >= totalPages ? 'disabled' : ''}>다음</button>`;
+      pagination.innerHTML = html;
+      pagination.querySelectorAll('button').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          const next = parseInt(btn.dataset.page, 10);
+          if (next >= 1 && next <= totalPages) loadPage(next);
+        });
+      });
+    }
+
+    async function loadPage(page) {
+      showLoading();
+      try {
+        const base = window.location.origin;
+        const res = await fetch(`${base}/api/listings?page=${page}&limit=${LIMIT}`);
+        if (!res.ok) throw new Error(res.status + ' ' + (await res.text()));
+        const data = await res.json();
+        renderList(data);
+      } catch (e) {
+        showError('목록을 불러오지 못했습니다. ' + e.message);
+      }
+    }
+
+    async function runSync() {
+      syncBtn.disabled = true;
+      syncMsg.textContent = '수집 중...';
+      try {
+        const base = window.location.origin;
+        const res = await fetch(`${base}/api/crawl`);
+        const json = await res.json();
+        if (json.ok) {
+          syncMsg.textContent = `${json.results.total}건 반영됨`;
+          loadPage(1);
+        } else {
+          syncMsg.textContent = '오류: ' + (json.error || '알 수 없음');
+        }
+      } catch (e) {
+        syncMsg.textContent = '오류: ' + e.message;
+      }
+      syncBtn.disabled = false;
+      setTimeout(() => { syncMsg.textContent = ''; }, 5000);
+    }
+
+    syncBtn.addEventListener('click', runSync);
+    loadPage(1);
+  </script>
+</body>
+</html>

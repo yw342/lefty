@@ -1,0 +1,14 @@
+{
+  "name": "lefty-guitar-tracker",
+  "version": "1.0.0",
+  "description": "왼손 중고 기타 매물 트래킹 웹서비스",
+  "type": "module",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'Static + serverless'",
+    "start": "vercel dev"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0"
+  }
+}
