@@ -55,45 +55,41 @@ function createFetcher() {
 
 /**
  * 목록 HTML에서 게시글 행 파싱
- * - idx로 상세 URL 구성, 제목·가격은 링크 텍스트에서 추출
- * - "판매완료" 포함 제목은 제외
+ * - href 내 idx=숫자 추출 (매칭: &amp; 또는 & 사용)
+ * - 제목·가격은 링크 텍스트 또는 인근 텍스트에서 추출
  */
 function parseListPage(html) {
   const items = [];
   const seen = new Set();
 
-  // href에 idx=숫자, 링크 텍스트에 제목 [댓글수] 가격
-  const linkRegex = /href="(https?:\/\/[^"]*\/bbs\/market\/sell\?[^"]*idx=(\d+)[^"]*)"[^>]*>([^<]+)</g;
+  // 1) href="...bbs/market/sell?...idx=123..."> 텍스트 (공백/개행 허용)
+  const linkRegex = /href="([^"]*\/bbs\/market\/sell\?[^"]*idx=(\d+)[^"]*)"[^>]*>\s*([^<]*)</g;
   let m;
   while ((m = linkRegex.exec(html)) !== null) {
-    const fullHref = m[1];
     const idx = m[2];
-    let text = m[3].trim();
+    let text = (m[3] || '').trim().replace(/\s+/g, ' ');
 
     if (seen.has(idx)) continue;
-    // 공지/필독 제외
-    if (/\[필독\]|뮬지기|^공지\s/i.test(text)) continue;
-    // 판매완료 제외 (제목에 포함된 경우)
+    if (/\[필독\]|뮬지기3?|^공지\s/i.test(text)) continue;
     if (/판매\s*완료|판매완료/i.test(text)) continue;
 
     seen.add(idx);
     const cleanUrl = `${MULE_BASE}/bbs/market/sell?idx=${idx}&v=v`;
 
-    // 제목 끝: " [댓글수] 25만원" 또는 " 120만원" 형태 제거 후 가격 추출
     let price = null;
-    const priceSuffix = text.match(/\s+\[\d+\]\s+(\d+(?:\.\d+)?)\s*만원\s*$/);
+    const priceSuffix = text.match(/\s*\[\d+\]\s*(\d+(?:\.\d+)?)\s*만원\s*$/);
     if (priceSuffix) {
       price = `${priceSuffix[1]}만원`;
-      text = text.replace(/\s+\[\d+\]\s+\d+(?:\.\d+)?\s*만원\s*$/, '').trim();
+      text = text.replace(/\s*\[\d+\]\s*\d+(?:\.\d+)?\s*만원\s*$/, '').trim();
     } else {
       const priceOnly = text.match(/(\d+(?:\.\d+)?)\s*만원\s*$|(\d{1,3}(?:,\d{3})*)\s*원\s*$/);
       if (priceOnly) {
         if (priceOnly[1]) price = `${priceOnly[1]}만원`;
         else if (priceOnly[2]) price = priceOnly[2].trim() + '원';
-        text = text.replace(/\s+\d+(?:\.\d+)?\s*만원\s*$|\s+\d{1,3}(?:,\d{3})*\s*원\s*$/, '').trim();
+        text = text.replace(/\s*\d+(?:\.\d+)?\s*만원\s*$|\s*\d{1,3}(?:,\d{3})*\s*원\s*$/, '').trim();
       }
     }
-    const title = text.replace(/\s+\[\d+\]\s*$/, '').trim() || `왼손 기타 ${idx}`;
+    const title = text.replace(/\s*\[\d+\]\s*$/, '').trim() || `왼손 기타 ${idx}`;
 
     items.push({
       source_site: 'mule',
@@ -102,7 +98,7 @@ function parseListPage(html) {
       price,
       product_name: title,
       image_url: null,
-      url: cleanUrl.replace(/&amp;/g, '&'),
+      url: cleanUrl,
       description: null,
       location: null,
     });

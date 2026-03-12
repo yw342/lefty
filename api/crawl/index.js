@@ -62,11 +62,11 @@ export default async function handler(req, res) {
       results.joongna.error = e.message || String(e);
     }
 
-    // 뮬
+    // 뮬 (SCRAPER_API_KEY 없으면 403으로 0건)
     try {
       const muleItems = await crawlMule({
-        maxItems: 10,
-        maxPages: 1,
+        maxItems: 15,
+        maxPages: 2,
         scraperApiKey: process.env.SCRAPER_API_KEY,
       });
       allRows.push(...muleItems.map(toRow));
@@ -75,9 +75,9 @@ export default async function handler(req, res) {
       results.mule.error = e.message || String(e);
     }
 
-    // 당근마켓
+    // 당근마켓 (검색 결과가 지역별로 적을 수 있음)
     try {
-      const daangnItems = await crawlDaangn({ enrich: true, maxItems: 5 });
+      const daangnItems = await crawlDaangn({ enrich: true, maxItems: 10 });
       allRows.push(...daangnItems.map(toRow));
       results.daangn.count = daangnItems.length;
     } catch (e) {

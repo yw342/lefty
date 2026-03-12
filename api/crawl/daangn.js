@@ -22,31 +22,33 @@ async function fetchWithHeaders(url) {
 
 /**
  * 목록/검색 페이지에서 상품 링크 추출
- * 당근 상품 URL: /kr/buy-sell/슬러그-id/
+ * 당근 상품 URL: /kr/buy-sell/슬러그 (쿼리 없는 경로, 슬러그가 상품 고유)
  */
 function parseListPage(html) {
   const items = [];
   const seen = new Set();
-  // /kr/buy-sell/...-id/ 형태 (id는 영문+숫자 끝)
-  const linkRegex = /href="(https?:\/\/[^"]*\/kr\/buy-sell\/[^"]+-([a-z0-9]+)\/?)"[^>]*>/gi;
+  // /kr/buy-sell/슬러그 (검색 /s, /s? 제외)
+  const linkRegex = /href="([^"]*\/kr\/buy-sell\/([^"]+))"/gi;
   let m;
   while ((m = linkRegex.exec(html)) !== null) {
-    const fullUrl = m[1];
-    const id = m[2];
-    if (seen.has(id)) continue;
-    if (id.length < 8) continue; // slug 일부만 잡힌 경우 스킵
-    seen.add(id);
+    let pathOrFull = m[1];
+    let slug = (m[2] || '').trim().split('?')[0];
+    if (!slug || slug === 's' || slug.startsWith('s?')) continue;
+    if (slug.length < 4) continue;
+    if (seen.has(slug)) continue;
+    seen.add(slug);
 
-    const url = fullUrl.startsWith('http') ? fullUrl : `${DAANGN_BASE}${fullUrl}`;
+    const path = pathOrFull.startsWith('http') ? pathOrFull.replace(/^https?:\/\/[^/]+/, '').split('?')[0] : pathOrFull.split('?')[0];
+    const finalUrl = (path.startsWith('/') ? DAANGN_BASE + path : DAANGN_BASE + '/' + path) + (path.endsWith('/') ? '' : '/');
 
     items.push({
       source_site: 'daangn',
-      external_id: id,
+      external_id: slug,
       title: null,
       price: null,
       product_name: null,
       image_url: null,
-      url,
+      url: finalUrl,
       description: null,
       location: null,
     });
